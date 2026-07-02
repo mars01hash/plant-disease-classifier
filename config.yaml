@@ -1,0 +1,61 @@
+# Configuration for Plant Disease Classifier
+# This is the "single source of truth" for all settings
+
+data:
+  raw_dir: "./data/raw"
+  processed_dir: "./data/processed"
+  image_size: 224  # ResNet standard input size
+  batch_size: 32
+  train_test_split: 0.8
+  val_split: 0.1
+  
+  # Data augmentation settings (prevents overfitting)
+  augmentation:
+    rotation_range: 20
+    zoom_range: 0.2
+    horizontal_flip: true
+    brightness_range: [0.8, 1.2]
+
+model:
+  name: "resnet50"  # Pre-trained backbone
+  pretrained: true  # Start with weights from ImageNet
+  
+  # Fine-tuning strategy
+  freeze_backbone: true  # Keep pre-trained weights, only train new layer
+  num_classes: 5  # Number of disease types
+  dropout_rate: 0.5
+  
+  # Training hyperparameters (these should be tuned)
+  learning_rate: 1e-4  # Small LR since we're fine-tuning
+  epochs: 20
+  optimizer: "adam"
+  loss: "categorical_crossentropy"
+  
+  # Where to save the trained model
+  save_path: "./models/trained/plant_classifier_v1.h5"
+  
+api:
+  port: 8000
+  host: "0.0.0.0"
+  workers: 4
+  
+  # Input validation
+  max_image_size_mb: 5
+  allowed_formats: ["jpg", "jpeg", "png"]
+  
+  # Request/response settings
+  max_batch_size: 10
+  confidence_threshold: 0.5
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/app.log"
+
+# Disease classes (this should match your dataset)
+classes:
+  - "healthy"
+  - "powdery_mildew"
+  - "rust"
+  - "leaf_spot"
+  - "blight"
