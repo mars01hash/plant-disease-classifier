@@ -110,7 +110,7 @@ class ModelBuilder:
         - Loss: categorical_crossentropy for multi-class classification
         - Metrics: what do we measure? accuracy is standard
         """
-        learning_rate = self.config["model"]["learning_rate"]
+        learning_rate = float(self.config["model"]["learning_rate"])
         
         optimizer = Adam(learning_rate=learning_rate)
         

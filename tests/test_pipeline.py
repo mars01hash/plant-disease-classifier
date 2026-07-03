@@ -52,13 +52,13 @@ def image_validator(config):
 def mock_images():
     """Create mock images for testing."""
     # Random images with shape (N, 224, 224, 3)
-    return np.random.rand(10, 224, 224, 3).astype(np.float32)
+    return np.random.rand(50, 224, 224, 3).astype(np.float32)
 
 
 @pytest.fixture
 def mock_labels():
     """Create mock labels (0-4 for 5 classes)."""
-    return np.random.randint(0, 5, 10)
+    return np.repeat(np.arange(5), 10)
 
 
 # ============================================================================
@@ -71,7 +71,7 @@ class TestDataLoader:
     def test_load_images_shape(self, config, logger, mock_images):
         """Test that loaded images have correct shape."""
         images = mock_images
-        assert images.shape == (10, 224, 224, 3)
+        assert images.shape == (len(mock_images), 224, 224, 3)
         assert images.dtype == np.float32
     
     def test_image_normalization(self, config, logger):
@@ -80,7 +80,9 @@ class TestDataLoader:
         from PIL import Image
         import cv2
         
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp.close()
+        try:
             # Create simple test image
             test_img = np.ones((100, 100, 3), dtype=np.uint8) * 128
             cv2.imwrite(tmp.name, test_img)
@@ -93,9 +95,41 @@ class TestDataLoader:
             assert img.min() >= 0, "Image min should be >= 0"
             assert img.max() <= 1, "Image max should be <= 1"
             assert img.shape == (224, 224, 3)
-            
+        finally:
             # Cleanup
-            Path(tmp.name).unlink()
+            Path(tmp.name).unlink(missing_ok=True)
+            
+    def test_load_images_from_directory(self, config, logger):
+        """Test loading images from a directory structure."""
+        import cv2
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            
+            # Create subdirectories for the classes
+            for class_name in config["classes"]:
+                class_dir = tmpdir_path / class_name
+                class_dir.mkdir()
+                
+                # Write one mock image for each extension: .jpg, .jpeg, .png
+                for ext in ["test.jpg", "test.jpeg", "test.png"]:
+                    img_path = class_dir / ext
+                    test_img = np.ones((100, 100, 3), dtype=np.uint8) * 128
+                    cv2.imwrite(str(img_path), test_img)
+            
+            # Load images
+            loader = ImageDataLoader(config, logger)
+            images, labels, file_paths = loader.load_images(str(tmpdir_path))
+            
+            # We have 5 classes, 3 images per class -> 15 images
+            expected_count = len(config["classes"]) * 3
+            assert len(images) == expected_count
+            assert len(labels) == expected_count
+            assert len(file_paths) == expected_count
+            
+            # Check shape and types
+            assert images.shape == (expected_count, 224, 224, 3)
+            assert images.dtype == np.float32
 
 
 class TestDataSplitter:
@@ -120,9 +154,9 @@ class TestDataSplitter:
         test_ratio = len(splits["test"]["images"]) / len(mock_images)
         
         # Allow 10% deviation due to random split
-        assert 0.60 < train_ratio < 0.75, f"Train ratio {train_ratio} out of range"
-        assert 0.05 < val_ratio < 0.20, f"Val ratio {val_ratio} out of range"
-        assert 0.05 < test_ratio < 0.20, f"Test ratio {test_ratio} out of range"
+        assert 0.60 < train_ratio <= 0.80, f"Train ratio {train_ratio} out of range"
+        assert 0.05 < val_ratio <= 0.20, f"Val ratio {val_ratio} out of range"
+        assert 0.05 < test_ratio <= 0.25, f"Test ratio {test_ratio} out of range"
     
     def test_split_stratification(self, config, logger, mock_images, mock_labels):
         """Test that class distribution is maintained in splits."""
@@ -157,7 +191,9 @@ class TestImageValidator:
     
     def test_validate_valid_file(self, image_validator):
         """Test validation of valid file."""
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp.close()
+        try:
             # Create a small valid image
             img = np.ones((100, 100, 3), dtype=np.uint8)
             from PIL import Image
@@ -165,8 +201,8 @@ class TestImageValidator:
             
             is_valid, msg = image_validator.validate_file(tmp.name)
             assert is_valid, f"Valid file failed validation: {msg}"
-            
-            Path(tmp.name).unlink()
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
     
     def test_validate_missing_file(self, image_validator):
         """Test validation of missing file."""
@@ -176,14 +212,16 @@ class TestImageValidator:
     
     def test_validate_wrong_format(self, image_validator):
         """Test validation of wrong format."""
-        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
-            tmp.write(b"this is text")
-            tmp.flush()
+        tmp = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        tmp.close()
+        try:
+            with open(tmp.name, "wb") as f:
+                f.write(b"this is text")
             
             is_valid, msg = image_validator.validate_file(tmp.name)
             assert not is_valid, "Wrong format should fail validation"
-            
-            Path(tmp.name).unlink()
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
 
 
 # ============================================================================

@@ -295,7 +295,7 @@ class PredictionCache:
         self.cache = {}
         self.max_size = max_size
     
-    def get(self, image_hash: str) -> Dict = None:
+    def get(self, image_hash: str) -> Dict:
         """Get cached prediction if exists."""
         return self.cache.get(image_hash)
     

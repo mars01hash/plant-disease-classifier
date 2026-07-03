@@ -18,6 +18,7 @@ import pickle
 from sklearn.model_selection import train_test_split
 from PIL import Image
 import cv2
+from tensorflow import keras
 
 # ============================================================================
 # DATA LOADER - Load images from disk efficiently
@@ -69,7 +70,8 @@ class ImageDataLoader:
                 continue
             
             # Load all images in this class
-            for image_file in class_dir.glob("*.jpg") + class_dir.glob("*.jpeg") + class_dir.glob("*.png"):
+            image_files = list(class_dir.glob("*.jpg")) + list(class_dir.glob("*.jpeg")) + list(class_dir.glob("*.png"))
+            for image_file in image_files:
                 try:
                     # Load and preprocess image
                     image = self._load_and_preprocess_image(str(image_file))
@@ -173,9 +175,12 @@ class DataAugmentor:
                     start = (new_size - height) // 2
                     image = resized[start:start+height, start:start+width]
                 else:
-                    pad_size = (height - new_size) // 2
-                    image = cv2.copyMakeBorder(resized, pad_size, pad_size, 
-                                              pad_size, pad_size, cv2.BORDER_REFLECT)
+                    pad_top = (height - new_size) // 2
+                    pad_bottom = height - new_size - pad_top
+                    pad_left = (width - new_size) // 2
+                    pad_right = width - new_size - pad_left
+                    image = cv2.copyMakeBorder(resized, pad_top, pad_bottom, 
+                                              pad_left, pad_right, cv2.BORDER_REFLECT)
         
         # Random horizontal flip
         if self.config["horizontal_flip"] and np.random.random() > 0.5:
@@ -274,7 +279,7 @@ class DataSplitter:
 # DATA GENERATOR - Efficient batching for training
 # ============================================================================
 
-class DataGenerator:
+class DataGenerator(keras.utils.Sequence):
     """
     Generate batches of data for training.
     
@@ -291,25 +296,19 @@ class DataGenerator:
         self.augment = augment
         self.augmentor = augmentor
         self.num_samples = len(images)
-        self.num_batches = int(np.ceil(self.num_samples / batch_size))
-        self.current_index = 0
+        self._num_batches = int(np.ceil(self.num_samples / batch_size))
         
         # Shuffle indices for randomness
-        self.indices = np.random.permutation(self.num_samples)
+        self.indices = np.arange(self.num_samples)
+        self.on_epoch_end()
     
-    def __iter__(self):
-        """Make this a Python iterator."""
-        self.current_index = 0
-        self.indices = np.random.permutation(self.num_samples)
-        return self
-    
-    def __next__(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Get next batch."""
-        if self.current_index >= self.num_samples:
-            raise StopIteration
+    def __len__(self) -> int:
+        """Number of batches."""
+        return self._num_batches
         
-        # Get batch indices
-        start_idx = self.current_index
+    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Get batch at index idx."""
+        start_idx = idx * self.batch_size
         end_idx = min(start_idx + self.batch_size, self.num_samples)
         batch_indices = self.indices[start_idx:end_idx]
         
@@ -327,10 +326,8 @@ class DataGenerator:
         num_classes = len(np.unique(self.labels))
         batch_labels_onehot = np.eye(num_classes)[batch_labels]
         
-        self.current_index = end_idx
-        
         return batch_images, batch_labels_onehot
-    
-    def __len__(self) -> int:
-        """Number of batches."""
-        return self.num_batches
+        
+    def on_epoch_end(self):
+        """Shuffle indices at the end of each epoch."""
+        np.random.shuffle(self.indices)

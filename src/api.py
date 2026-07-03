@@ -15,10 +15,11 @@ from typing import List, Optional
 from pathlib import Path
 import json
 from datetime import datetime
+import tempfile
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import uvicorn
 
 # Import our modules
@@ -40,8 +41,8 @@ class PredictionResponse(BaseModel):
     all_predictions: dict = Field(description="Confidence for all classes")
     metadata: dict = Field(description="Prediction metadata")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success": True,
                 "class_name": "powdery_mildew",
@@ -60,6 +61,7 @@ class PredictionResponse(BaseModel):
                 }
             }
         }
+    )
 
 
 class HealthResponse(BaseModel):
@@ -69,8 +71,8 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     version: str = "1.0"
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "healthy",
                 "timestamp": "2024-01-15T10:30:00Z",
@@ -78,6 +80,7 @@ class HealthResponse(BaseModel):
                 "version": "1.0"
             }
         }
+    )
 
 
 class BatchPredictionResponse(BaseModel):
@@ -108,33 +111,12 @@ class MLApp:
         # Setup logging
         self.logger = setup_logging(self.config)
         
-        # Create FastAPI app
-        self.app = FastAPI(
-            title="Plant Disease Classifier",
-            description="Classify plant diseases from images using deep learning",
-            version="1.0.0"
-        )
+        # Setup lifespan handler
+        from contextlib import asynccontextmanager
         
-        # Initialize components (will be loaded at startup)
-        self.model = None
-        self.predictor = None
-        self.batch_predictor = None
-        self.validator = ImageValidator(self.config)
-        
-        # Setup routes
-        self._setup_routes()
-        
-        # Setup lifecycle events
-        self._setup_lifecycle_events()
-        
-        self.logger.info("MLApp initialized")
-    
-    def _setup_lifecycle_events(self):
-        """Setup startup and shutdown events."""
-        
-        @self.app.on_event("startup")
-        async def startup():
-            """Load model and prepare for requests."""
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            """Load model at startup, clean up at shutdown."""
             self.logger.info("=" * 60)
             self.logger.info("STARTING UP APPLICATION")
             self.logger.info("=" * 60)
@@ -160,12 +142,31 @@ class MLApp:
             except Exception as e:
                 self.logger.error(f"Failed to load model: {e}")
                 raise
-        
-        @self.app.on_event("shutdown")
-        async def shutdown():
-            """Cleanup on shutdown."""
+                
+            yield
+            
+            # Shutdown logic
             self.logger.info("Shutting down application")
             self.logger.info("=" * 60)
+
+        # Create FastAPI app
+        self.app = FastAPI(
+            title="Plant Disease Classifier",
+            description="Classify plant diseases from images using deep learning",
+            version="1.0.0",
+            lifespan=lifespan
+        )
+        
+        # Initialize components (will be loaded at startup)
+        self.model = None
+        self.predictor = None
+        self.batch_predictor = None
+        self.validator = ImageValidator(self.config)
+        
+        # Setup routes
+        self._setup_routes()
+        
+        self.logger.info("MLApp initialized")
     
     def _setup_routes(self):
         """Setup API routes."""
@@ -224,7 +225,7 @@ class MLApp:
                     )
                 
                 # Save temporarily
-                temp_path = f"/tmp/{file.filename}"
+                temp_path = str(Path(tempfile.gettempdir()) / file.filename)
                 with open(temp_path, 'wb') as f:
                     f.write(contents)
                 
@@ -290,7 +291,7 @@ class MLApp:
                 temp_paths = []
                 for file in files:
                     contents = await file.read()
-                    temp_path = f"/tmp/{file.filename}"
+                    temp_path = str(Path(tempfile.gettempdir()) / file.filename)
                     with open(temp_path, 'wb') as f:
                         f.write(contents)
                     temp_paths.append(temp_path)
@@ -346,25 +347,26 @@ class MLApp:
             }
 
 
+# Create app at module level so that uvicorn workers can import it
+ml_app = MLApp("./config.yaml")
+app = ml_app.app
+
+
 # ============================================================================
 # MAIN
 # ============================================================================
 
 def main():
     """Start the API server."""
-    
-    # Create app
-    ml_app = MLApp("./config.yaml")
-    app = ml_app.app
-    
     # Run with Uvicorn
     # Production deployment would use gunicorn + uvicorn workers
     uvicorn.run(
-        app,
+        "api:app",
         host=ml_app.config["api"]["host"],
         port=ml_app.config["api"]["port"],
         workers=ml_app.config["api"]["workers"],
-        log_level="info"
+        log_level="info",
+        app_dir=str(Path(__file__).parent)
     )
 
 
