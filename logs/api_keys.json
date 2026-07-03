@@ -1,0 +1,28 @@
+{
+  "001": [
+    {
+      "key": "sk-nMeZj2I6Qo4gd5aXNudLbG2J2y1ixJQKGFlM2SHJjyA",
+      "name": "user1",
+      "created": "2026-07-03T18:05:52.274021",
+      "last_used": null,
+      "active": true,
+      "usage_count": 0
+    },
+    {
+      "key": "sk-2f2gCaIXCKgKN2I150Do0cFcfuAnZRalsrTWdh3JTuU",
+      "name": "user1",
+      "created": "2026-07-03T18:14:44.762471",
+      "last_used": "2026-07-03T18:15:11.119742",
+      "active": true,
+      "usage_count": 1
+    },
+    {
+      "key": "sk-tPcUH2a--f76xtfESE1v2puOQ4X2RpEK5p66oCeSyr8",
+      "name": "user1",
+      "created": "2026-07-03T18:22:36.436774",
+      "last_used": "2026-07-03T18:25:14.558813",
+      "active": true,
+      "usage_count": 1
+    }
+  ]
+}

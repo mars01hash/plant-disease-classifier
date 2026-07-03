@@ -1,13 +1,11 @@
 # 🌿 Plant Disease Classifier - Production ML System
 
-A **complete, production-ready deep learning system** for classifying plant diseases from images. 
+A complete, production-ready deep learning system for classifying plant diseases from images. 
 
-This is not just code—it's a **teaching project** showing how to build professional ML systems that actually work in production.
 
 ---
 
-## ⚡ Quick Start (5 Minutes)
-
+## ⚡ Quick Start
 ### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
